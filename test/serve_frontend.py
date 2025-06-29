@@ -20,6 +20,12 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
+    def do_GET(self):
+        # Serve verify-user.html for /verify-user (with or without query params)
+        if self.path.startswith("/verify-user"):
+            self.path = "/verify-user.html"
+        return super().do_GET()
+
 if __name__ == "__main__":
     with socketserver.TCPServer(("", PORT), MyHTTPRequestHandler) as httpd:
         print(f"Frontend server running at http://localhost:{PORT}")

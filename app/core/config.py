@@ -11,6 +11,14 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 30
 
+    # Email config fields
+    EMAIL_HOST: str
+    EMAIL_PORT: int
+    EMAIL_USER: str
+    EMAIL_PASS: str
+    EMAIL_FROM: str
+    APP_NAME: str
+
     class Config:
         env_file = ".env"
 

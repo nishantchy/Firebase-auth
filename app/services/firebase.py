@@ -1,7 +1,12 @@
+import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import firebase_admin
 from firebase_admin import credentials, auth
 from fastapi import HTTPException, status
 from typing import Dict, Any
+from app.core.config import settings
 
 class FirebaseService:
     def __init__(self, service_account_path: str):
@@ -16,8 +21,12 @@ class FirebaseService:
                 email=email,
                 password=password,
                 display_name=display_name,
-                email_verified=False
+                email_verified=False  # Always start as unverified
             )
+            
+            # Send verification email
+            await self.send_verification_email(email, display_name)
+            
             return {
                 "uid": user_record.uid,
                 "email": user_record.email,
@@ -33,6 +42,42 @@ class FirebaseService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to create user: {str(e)}"
+            )
+    
+    async def send_verification_email(self, email: str, display_name: str = ""):
+        """Generate Firebase verification link and send it via SMTP with a custom template."""
+        try:
+            # 1. Generate the verification link
+            verification_link = auth.generate_email_verification_link(email)
+            # 2. Prepare the email
+            app_name = settings.APP_NAME
+            subject = f"Verify your email for {app_name}"
+            html = f"""
+            <html>
+              <body style='font-family: Arial, sans-serif;'>
+                <h2>Welcome to {app_name}!</h2>
+                <p>Hi {display_name or email},</p>
+                <p>Thank you for signing up. Please verify your email address by clicking the button below:</p>
+                <a href='{verification_link}' style='background: #1976d2; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 4px;'>Verify Email</a>
+                <p>If you did not create an account, you can ignore this email.</p>
+                <p>Thanks,<br>{app_name} Team</p>
+              </body>
+            </html>
+            """
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = settings.EMAIL_FROM
+            msg["To"] = email
+            msg.attach(MIMEText(html, "html"))
+            # 3. Send the email
+            with smtplib.SMTP(settings.EMAIL_HOST, settings.EMAIL_PORT) as server:
+                server.starttls()
+                server.login(settings.EMAIL_USER, settings.EMAIL_PASS)
+                server.sendmail(msg["From"], [email], msg.as_string())
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to send verification email: {str(e)}"
             )
     
     async def verify_id_token(self, id_token: str) -> Dict[str, Any]:

@@ -81,7 +81,7 @@ async function callBackendAPI(endpoint, data) {
   }
 }
 
-// Email/Password Registration
+// Email/Password Registration (Backend Only)
 signupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -94,34 +94,15 @@ signupForm.addEventListener("submit", async (e) => {
   submitBtn.textContent = "Creating Account...";
 
   try {
-    console.log("Starting registration process...");
-    console.log("Email:", email);
-    console.log("Name:", name);
-
-    // Call backend to create user
-    console.log("Calling backend API: /api/auth/email-register");
+    // Call backend to create user and send verification email
     const result = await callBackendAPI("/api/auth/email-register", {
       email: email,
       password: password,
       display_name: name,
     });
-
-    showStatus("Account created successfully!", "success");
-    console.log("Registration successful:", result);
-
-    // Store the JWT token
-    localStorage.setItem("jwt_token", result.access_token);
-    localStorage.setItem("user", JSON.stringify(result.user));
-
-    //show success
-    setTimeout(() => {
-      alert("Account created successfully! You are now logged in.");
-    }, 2000);
+    showWaitingForVerification(email);
   } catch (error) {
-    console.error("Registration error:", error);
     let errorMessage = error.message;
-
-    // Handle backend errors
     if (errorMessage.includes("Email already exists")) {
       errorMessage = "Email already exists. Please try logging in instead.";
     } else if (errorMessage.includes("weak-password")) {
@@ -129,7 +110,6 @@ signupForm.addEventListener("submit", async (e) => {
     } else if (errorMessage.includes("invalid-email")) {
       errorMessage = "Invalid email address.";
     }
-
     showStatus(errorMessage, "error");
   } finally {
     submitBtn.disabled = false;
@@ -137,7 +117,7 @@ signupForm.addEventListener("submit", async (e) => {
   }
 });
 
-// Email/Password Login
+// Email/Password Login (Firebase JS SDK)
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -149,40 +129,46 @@ loginForm.addEventListener("submit", async (e) => {
   submitBtn.textContent = "Logging in...";
 
   try {
-    console.log("Starting login process...");
-    console.log("Email:", email);
-
-    // Calling backend to authenticate
-    console.log("Calling backend API: /api/auth/email-login");
+    // Sign in with Firebase
+    const userCredential = await window.signInWithEmailAndPassword(
+      window.firebaseAuth,
+      email,
+      password
+    );
+    const user = userCredential.user;
+    if (!user.emailVerified) {
+      showStatus(
+        "Please verify your email address before logging in. Check your inbox for the verification link.",
+        "error"
+      );
+      await window.signOut(window.firebaseAuth);
+      return;
+    }
+    // Get Firebase ID token
+    const idToken = await user.getIdToken();
+    // Send credentials to backend for session/JWT
     const result = await callBackendAPI("/api/auth/email-login", {
-      email: email,
-      password: password,
+      email,
+      password,
     });
-
     showStatus("Login successful!", "success");
-    console.log("Login successful:", result);
-
-    // Store the JWT token
     localStorage.setItem("jwt_token", result.access_token);
     localStorage.setItem("user", JSON.stringify(result.user));
-
-    // Redirect or show success
     setTimeout(() => {
       alert("Login successful! Welcome back.");
       // You can redirect to a dashboard here
     }, 2000);
   } catch (error) {
-    console.error("Login error:", error);
     let errorMessage = error.message;
-
-    // Handle specific backend errors
-    if (errorMessage.includes("Invalid email or password")) {
+    if (
+      error.code === "auth/wrong-password" ||
+      error.code === "auth/user-not-found"
+    ) {
       errorMessage =
         "Invalid email or password. Please check your credentials.";
-    } else if (errorMessage.includes("User not found")) {
-      errorMessage = "User not found. Please check your email or sign up.";
+    } else if (error.code === "auth/invalid-email") {
+      errorMessage = "Invalid email address.";
     }
-
     showStatus(errorMessage, "error");
   } finally {
     submitBtn.disabled = false;
@@ -204,7 +190,7 @@ googleSignInBtn.addEventListener("click", async () => {
     const idToken = await result.user.getIdToken();
 
     // Sending ID token to backend
-    const apiResult = await callBackendAPI("/api/auth/login/google", {
+    const apiResult = await callBackendAPI("/api/auth/login-google", {
       id_token: idToken,
     });
 
@@ -315,4 +301,56 @@ function logout() {
 function clearTestData() {
   localStorage.clear();
   showStatus("Test data cleared!", "info");
+}
+
+// After successful registration, show waiting for verification section
+function showWaitingForVerification(email) {
+  document.getElementById("loginForm").style.display = "none";
+  document.getElementById("signupForm").style.display = "none";
+  document.getElementById("waitingVerification").style.display = "block";
+  document.getElementById("verificationStatusMessage").textContent = "";
+  // Store email for resend
+  window.lastRegisteredEmail = email;
+}
+
+// Add event listener for resend verification
+const resendVerificationBtn = document.getElementById("resendVerificationBtn");
+if (resendVerificationBtn) {
+  resendVerificationBtn.addEventListener("click", async () => {
+    const email = window.lastRegisteredEmail;
+    if (!email) {
+      document.getElementById("verificationStatusMessage").textContent =
+        "No email found. Please register again.";
+      return;
+    }
+    resendVerificationBtn.disabled = true;
+    resendVerificationBtn.textContent = "Resending...";
+    try {
+      const response = await callBackendAPI(
+        "/api/auth/resend-verification",
+        email,
+        "POST",
+        true
+      );
+      document.getElementById("verificationStatusMessage").textContent =
+        "Verification email sent!";
+    } catch (error) {
+      document.getElementById("verificationStatusMessage").textContent =
+        "Failed to resend verification email.";
+    } finally {
+      resendVerificationBtn.disabled = false;
+      resendVerificationBtn.textContent = "Resend Verification Email";
+    }
+  });
+}
+
+// Add event listener for back to login
+const backToLoginBtn = document.getElementById("backToLoginBtn");
+if (backToLoginBtn) {
+  backToLoginBtn.addEventListener("click", () => {
+    document.getElementById("waitingVerification").style.display = "none";
+    document.getElementById("loginForm").style.display = "block";
+    document.getElementById("signupForm").style.display = "none";
+    document.getElementById("verificationStatusMessage").textContent = "";
+  });
 }

@@ -6,9 +6,13 @@ from app.routes.auth import router as auth_router
 
 create_db_and_tables()
 
-app = FastAPI()
+app = FastAPI(
+     title="Firebase Authentication",
+    description="Backend API for Firebase Authentication",
+    version="1.0.0",
+)
 
-# Add CORS middleware
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  #development 

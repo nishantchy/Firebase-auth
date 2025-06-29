@@ -5,23 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Authentication Demo</title>
     <link rel="stylesheet" href="styles.css" />
-    <!-- Firebase SDK for Google Sign-In only -->
+    <!-- Firebase SDK for Google Sign-In and Email/Password -->
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
       import {
         getAuth,
         signInWithPopup,
         GoogleAuthProvider,
+        createUserWithEmailAndPassword,
+        signInWithEmailAndPassword,
+        sendEmailVerification,
+        onAuthStateChanged,
+        signOut,
       } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
       const firebaseConfig = {
-        apiKey: "",
-        authDomain: "",
-        projectId: "",
-        storageBucket: "",
-        messagingSenderId: "",
-        appId: "",
-        measurementId: "",
+        apiKey: "AIzaSyDoeT1TzJIkxhcFtdYHNljksSwRiL1HutQ",
+        authDomain: "softified-d82c3.firebaseapp.com",
+        projectId: "softified-d82c3",
+        storageBucket: "softified-d82c3.firebasestorage.app",
+        messagingSenderId: "702015510375",
+        appId: "1:702015510375:web:667598db812fe18ed181c2",
+        measurementId: "G-ZXCEE1NH24",
       };
 
       const app = initializeApp(firebaseConfig);
@@ -30,6 +35,11 @@
       window.firebaseAuth = auth;
       window.GoogleAuthProvider = GoogleAuthProvider;
       window.signInWithPopup = signInWithPopup;
+      window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+      window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+      window.sendEmailVerification = sendEmailVerification;
+      window.onAuthStateChanged = onAuthStateChanged;
+      window.signOut = signOut;
     </script>
   </head>
   <body>
@@ -106,6 +116,31 @@
 
         <!-- Status Messages -->
         <div id="statusMessage" class="status-message"></div>
+
+        <!-- Waiting for Verification Section -->
+        <div
+          id="waitingVerification"
+          class="waiting-verification"
+          style="display: none"
+        >
+          <h2>Verify Your Email</h2>
+          <p>
+            Please verify your email address. Check your inbox for a
+            verification link.<br />
+            If you didn't receive the email, you can resend it below.
+          </p>
+          <button id="resendVerificationBtn" class="btn-primary">
+            Resend Verification Email
+          </button>
+          <button
+            id="backToLoginBtn"
+            class="btn-secondary"
+            style="margin-top: 1rem"
+          >
+            Back to Login
+          </button>
+          <div id="verificationStatusMessage" class="status-message"></div>
+        </div>
       </div>
     </div>
 

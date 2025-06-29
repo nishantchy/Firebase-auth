@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Email Verification</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import {
+        getAuth,
+        applyActionCode,
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyDoeT1TzJIkxhcFtdYHNljksSwRiL1HutQ",
+        authDomain: "softified-d82c3.firebaseapp.com",
+        projectId: "softified-d82c3",
+        storageBucket: "softified-d82c3.firebasestorage.app",
+        messagingSenderId: "702015510375",
+        appId: "1:702015510375:web:667598db812fe18ed181c2",
+        measurementId: "G-ZXCEE1NH24",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const urlParams = new URLSearchParams(window.location.search);
+      const mode = urlParams.get("mode");
+      const actionCode = urlParams.get("oobCode");
+      document.addEventListener("DOMContentLoaded", async () => {
+        const statusMessage = document.getElementById("statusMessage");
+        const loadingSpinner = document.getElementById("loadingSpinner");
+        const verificationActions = document.getElementById(
+          "verificationActions"
+        );
+        if (mode === "verifyEmail" && actionCode) {
+          try {
+            await applyActionCode(auth, actionCode);
+            statusMessage.innerHTML =
+              '<span class="success">✅ Email verified successfully! You can now log in to your account.</span>';
+          } catch (error) {
+            statusMessage.innerHTML =
+              '<span class="error">❌ Verification link is invalid or expired. Please try again.</span>';
+          }
+        } else {
+          statusMessage.innerHTML =
+            '<span class="error">Invalid verification link. Please check your email for the correct link.</span>';
+        }
+        loadingSpinner.style.display = "none";
+        verificationActions.style.display = "flex";
+      });
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <div class="auth-container">
+        <div class="auth-header">
+          <h1>Email Verification</h1>
+          <p id="verificationMessage">Verifying your email address...</p>
+        </div>
+        <div id="verificationStatus" class="verification-status">
+          <div class="loading-spinner" id="loadingSpinner"></div>
+          <div id="statusMessage" class="status-message"></div>
+        </div>
+        <div
+          id="verificationActions"
+          class="verification-actions"
+          style="display: none"
+        >
+          <button id="loginButton" class="btn-primary">Go to Login</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      document
+        .getElementById("loginButton")
+        .addEventListener("click", function () {
+          window.location.href = "index.html";
+        });
+    </script>
+    <style>
+      .verification-status {
+        text-align: center;
+        margin: 2rem 0;
+      }
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      .verification-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+      .success {
+        color: #27ae60;
+        font-weight: 500;
+      }
+      .error {
+        color: #e74c3c;
+        font-weight: 500;
+      }
+    </style>
+  </body>
+</html>
