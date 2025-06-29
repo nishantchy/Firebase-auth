@@ -36,7 +36,17 @@ test/auth/        # Frontend (HTML/CSS/JS)
    FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
    JWT_SECRET_KEY=secret-key
    ```
-3. **Run the FastAPI server:**
+3. **Set up Firebase Service Account:**
+
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Select your project → Project Settings → Service Accounts
+   - Click "Generate new private key" to download your service account JSON
+   - Copy `firebase-service-account.template.json` to `firebase-service-account.json`
+   - Replace the placeholder values with your actual Firebase service account credentials
+
+   **⚠️ Important:** Never commit `firebase-service-account.json` to version control!
+
+4. **Run the FastAPI server:**
    ```sh
    uvicorn app.main:app --reload
    ```
