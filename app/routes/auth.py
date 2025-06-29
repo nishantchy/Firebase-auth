@@ -1,0 +1,184 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlmodel import Session, select, SQLModel
+from datetime import datetime, timedelta
+import jwt
+from typing import Optional
+from app.core.database import get_session
+from app.core.config import settings
+from app.utils.security import hash_password
+from app.services.dependencies import get_firebase_service
+from app.utils.jwt_utils import create_access_token
+from app.services.user_service import get_or_create_user
+
+from app.models.user import User, AuthProvider
+from app.schemas.user import UserCreate, UserCreateWithFirebase, UserLogin, UserLoginResponse, TokenResponse, GoogleAuthRequest
+from app.services.firebase import FirebaseService
+
+router = APIRouter(
+    prefix="/api/auth", 
+    tags=["Authentication"]
+    )
+
+@router.post("/email-register", response_model=TokenResponse)
+async def register_with_email(
+    user_data: UserCreate,
+    session: Session = Depends(get_session),
+    firebase_service: FirebaseService = Depends(get_firebase_service)
+):
+    """Register user with email and password"""
+    
+    try:
+        # Create user in Firebase from backend
+        firebase_user = await firebase_service.create_user_with_email_password(
+            email=user_data.email,
+            password=user_data.password,
+            display_name=user_data.display_name
+        )
+        
+        # Hash password for local storage
+        hashed_password = hash_password(user_data.password)
+        
+        # Check if user already exists in our database
+        statement = select(User).where(User.email == user_data.email)
+        existing_user = session.exec(statement).first()
+        
+        if existing_user:
+            # User exists, update their info
+            existing_user.firebase_uid = firebase_user["uid"]
+            existing_user.display_name = user_data.display_name
+            existing_user.password = hashed_password
+            existing_user.updated_at = datetime.now()
+            session.add(existing_user)
+            session.commit()
+            session.refresh(existing_user)
+            user = existing_user
+        else:
+            # Create new user in our database
+            user = User(
+                firebase_uid=firebase_user["uid"],
+                email=user_data.email,
+                password=hashed_password,
+                display_name=user_data.display_name,
+                auth_provider=AuthProvider.EMAIL,
+                is_email_verified=firebase_user["email_verified"]
+            )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+        
+        # Create access token
+        access_token_expires = timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.firebase_uid, "user_id": user.id},
+            secret_key=settings.JWT_SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM,
+            expires_delta=access_token_expires
+        )
+        
+        return TokenResponse(
+            access_token=access_token,
+            user=UserLoginResponse.model_validate(user)
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to register user: {str(e)}"
+        )
+
+@router.post("/email-login", response_model=TokenResponse)
+async def login_with_email(
+    user_data: UserLogin,
+    session: Session = Depends(get_session),
+    firebase_service: FirebaseService = Depends(get_firebase_service)
+):
+    """Login user with email and password"""
+    
+    # Find user in database
+    statement = select(User).where(User.email == user_data.email)
+    user = session.exec(statement).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+    
+    if not user.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account not set up for email/password login"
+        )
+    
+    # Verify password
+    from app.utils.security import verify_password
+    if not verify_password(user_data.password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+    
+    # Create access token
+    access_token_expires = timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.firebase_uid, "user_id": user.id},
+        secret_key=settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+        expires_delta=access_token_expires
+    )
+    
+    return TokenResponse(
+        access_token=access_token,
+        user=UserLoginResponse.model_validate(user)
+    )
+
+@router.post("/login/google", response_model=TokenResponse)
+async def login_with_google(
+    auth_data: GoogleAuthRequest,
+    session: Session = Depends(get_session),
+    firebase_service: FirebaseService = Depends(get_firebase_service)
+):
+    """Login/Register user with Google via Firebase ID token"""
+    
+    # Verify the ID token
+    decoded_token = await firebase_service.verify_id_token(auth_data.id_token)
+    
+    # Get user info from Firebase
+    firebase_user = await firebase_service.get_user_by_uid(decoded_token["uid"])
+    
+    # Determine if this is a Google sign-in
+    is_google_provider = any(
+        provider.provider_id == "google.com" 
+        for provider in firebase_user.get("provider_data", [])
+    )
+    
+    if not is_google_provider:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This endpoint is only for Google authentication"
+        )
+    
+    # Get or create user in our database
+    user = get_or_create_user(
+        session=session,
+        firebase_uid=firebase_user["uid"],
+        email=firebase_user["email"],
+        display_name=firebase_user["display_name"],
+        photo_url=firebase_user.get("photo_url"),
+        auth_provider=AuthProvider.GOOGLE,
+        is_email_verified=firebase_user["email_verified"]
+    )
+    
+    # Create access token
+    access_token_expires = timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.firebase_uid, "user_id": user.id},
+        secret_key=settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+        expires_delta=access_token_expires
+    )
+    
+    return TokenResponse(
+        access_token=access_token,
+        user=UserLoginResponse.model_validate(user)
+    )
