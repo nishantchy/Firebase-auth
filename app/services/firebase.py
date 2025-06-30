@@ -80,6 +80,42 @@ class FirebaseService:
                 detail=f"Failed to send verification email: {str(e)}"
             )
     
+    async def send_password_reset_email(self, email: str, display_name: str = ""):
+        """Generate Firebase password reset link and send it via SMTP with a custom template."""
+        try:
+            # 1. Generate the password reset link
+            reset_link = auth.generate_password_reset_link(email)
+            # 2. Prepare the email
+            app_name = settings.APP_NAME
+            subject = f"Reset your password for {app_name}"
+            html = f"""
+            <html>
+              <body style='font-family: Arial, sans-serif;'>
+                <h2>Password Reset for {app_name}</h2>
+                <p>Hello,</p>
+                <p>Follow this link to reset your {app_name} password for your {email} account.</p>
+                <a href='{reset_link}' style='background: #1976d2; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 4px;'>Reset Password</a>
+                <p>If you didn't ask to reset your password, you can ignore this email.</p>
+                <p>Thanks,<br>Your {app_name} team</p>
+              </body>
+            </html>
+            """
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = settings.EMAIL_FROM
+            msg["To"] = email
+            msg.attach(MIMEText(html, "html"))
+            # 3. Send the email
+            with smtplib.SMTP(settings.EMAIL_HOST, settings.EMAIL_PORT) as server:
+                server.starttls()
+                server.login(settings.EMAIL_USER, settings.EMAIL_PASS)
+                server.sendmail(msg["From"], [email], msg.as_string())
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to send password reset email: {str(e)}"
+            )
+    
     async def verify_id_token(self, id_token: str) -> Dict[str, Any]:
         """Verify Firebase ID token and return user info"""
         try:

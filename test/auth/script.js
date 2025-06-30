@@ -354,3 +354,52 @@ if (backToLoginBtn) {
     document.getElementById("verificationStatusMessage").textContent = "";
   });
 }
+
+// Forgot Password Flow
+const forgotPasswordLink = document.getElementById("forgotPasswordLink");
+const passwordResetRequestForm = document.getElementById(
+  "passwordResetRequestForm"
+);
+const backToLoginFromReset = document.getElementById("backToLoginFromReset");
+
+if (forgotPasswordLink && passwordResetRequestForm && backToLoginFromReset) {
+  forgotPasswordLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    loginForm.style.display = "none";
+    signupForm.style.display = "none";
+    passwordResetRequestForm.style.display = "block";
+    clearStatus();
+  });
+
+  backToLoginFromReset.addEventListener("click", (e) => {
+    e.preventDefault();
+    passwordResetRequestForm.style.display = "none";
+    loginForm.style.display = "block";
+    clearStatus();
+  });
+
+  passwordResetRequestForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const resetEmail = document.getElementById("resetEmail").value;
+    const submitBtn = passwordResetRequestForm.querySelector(
+      'button[type="submit"]'
+    );
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Sending...";
+    try {
+      await callBackendAPI("/api/auth/password-reset", { email: resetEmail });
+      showStatus(
+        "If this email is registered, a password reset link has been sent.",
+        "success"
+      );
+    } catch (error) {
+      showStatus(
+        "Failed to send password reset email. Please try again.",
+        "error"
+      );
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Send Reset Link";
+    }
+  });
+}

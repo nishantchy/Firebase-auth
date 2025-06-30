@@ -10,13 +10,14 @@ from app.services.user_service import get_or_create_user
 from app.utils.email_validator import EmailValidator
 
 from app.models.user import User, AuthProvider
-from app.schemas.user import UserCreate, UserCreateWithFirebase, UserLogin, UserLoginResponse, TokenResponse, GoogleAuthRequest
+from app.schemas.user import UserCreate, UserLogin, UserLoginResponse, TokenResponse, GoogleAuthRequest, PasswordResetRequest, SetNewPasswordRequest
 from app.services.firebase import FirebaseService
 
 router = APIRouter(
     prefix="/api/auth", 
     tags=["Authentication"]
     )
+
 
 @router.post("/email-register", response_model=TokenResponse)
 async def register_with_email(
@@ -206,3 +207,57 @@ async def resend_verification_email(
     # Send verification email
     await firebase_service.send_verification_email(user.email, user.display_name)
     return {"message": "Verification email sent successfully"}
+
+@router.post("/password-reset")
+async def password_reset(
+    request: PasswordResetRequest,
+    session: Session = Depends(get_session),
+    firebase_service: FirebaseService = Depends(get_firebase_service)
+):
+    email = request.email
+    # Find user in database
+    statement = select(User).where(User.email == email)
+    user = session.exec(statement).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    # Send password reset email
+    await firebase_service.send_password_reset_email(user.email, user.display_name)
+    return {"message": "Password reset email sent successfully"}
+
+@router.post("/set-new-password")
+async def set_new_password(
+    request: SetNewPasswordRequest,
+    session: Session = Depends(get_session),
+    firebase_service: FirebaseService = Depends(get_firebase_service)
+):
+    """Set a new password using oobCode and update local DB."""
+    import requests
+    try:
+        firebase_api_key = settings.FIREBASE_API_KEY
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:resetPassword?key={firebase_api_key}"
+        payload = {
+            "oobCode": request.oobCode,
+            "newPassword": request.new_password
+        }
+        resp = requests.post(url, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        email = data["email"]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to reset password: {str(e)}")
+
+    from app.utils.security import hash_password
+    statement = select(User).where(User.email == email)
+    user = session.exec(statement).first()
+    if user:
+        user.password = hash_password(request.new_password)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+    else:
+        raise HTTPException(status_code=404, detail="User not found in local database")
+
+    return {"message": "Password has been reset successfully."}

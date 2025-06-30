@@ -50,3 +50,10 @@ class HiddenResponse(SQLModel):
     email: EmailStr
     display_name: Optional[str]
     photo_url: Optional[str]
+
+class PasswordResetRequest(SQLModel):
+    email: EmailStr
+
+class SetNewPasswordRequest(SQLModel):
+    oobCode: str
+    new_password: str

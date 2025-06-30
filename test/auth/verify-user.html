@@ -10,6 +10,7 @@
       import {
         getAuth,
         applyActionCode,
+        confirmPasswordReset,
       } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
       const firebaseConfig = {
@@ -33,6 +34,7 @@
         const verificationActions = document.getElementById(
           "verificationActions"
         );
+        const passwordResetForm = document.getElementById("passwordResetForm");
         if (mode === "verifyEmail" && actionCode) {
           try {
             await applyActionCode(auth, actionCode);
@@ -42,12 +44,68 @@
             statusMessage.innerHTML =
               '<span class="error">❌ Verification link is invalid or expired. Please try again.</span>';
           }
+          loadingSpinner.style.display = "none";
+          verificationActions.style.display = "flex";
+        } else if (mode === "resetPassword" && actionCode) {
+          // Show password reset form
+          document.querySelector(".auth-header h1").textContent =
+            "Reset Password";
+          document.getElementById("verificationMessage").textContent =
+            "Enter your new password below.";
+          passwordResetForm.style.display = "block";
+          loadingSpinner.style.display = "none";
+          verificationActions.style.display = "none";
+          statusMessage.innerHTML = "";
+          passwordResetForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const newPassword = document.getElementById("newPassword").value;
+            const confirmPassword =
+              document.getElementById("confirmPassword").value;
+            if (newPassword.length < 6) {
+              statusMessage.innerHTML =
+                '<span class="error">Password must be at least 6 characters.</span>';
+              return;
+            }
+            if (newPassword !== confirmPassword) {
+              statusMessage.innerHTML =
+                '<span class="error">Passwords do not match.</span>';
+              return;
+            }
+            try {
+              // Call backend to set new password
+              const resp = await fetch(
+                "http://localhost:8000/api/auth/set-new-password",
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    oobCode: actionCode,
+                    new_password: newPassword,
+                  }),
+                }
+              );
+              const data = await resp.json();
+              if (resp.ok) {
+                statusMessage.innerHTML =
+                  '<span class="success">✅ Password has been reset successfully! You can now log in with your new password.</span>';
+                passwordResetForm.style.display = "none";
+                verificationActions.style.display = "flex";
+              } else {
+                statusMessage.innerHTML = `<span class='error'>❌ ${
+                  data.detail || "Password reset failed. Please try again."
+                }</span>`;
+              }
+            } catch (error) {
+              statusMessage.innerHTML =
+                '<span class="error">❌ Password reset failed. Please try again.</span>';
+            }
+          });
         } else {
           statusMessage.innerHTML =
-            '<span class="error">Invalid verification link. Please check your email for the correct link.</span>';
+            '<span class="error">Invalid link. Please check your email for the correct link.</span>';
+          loadingSpinner.style.display = "none";
+          verificationActions.style.display = "flex";
         }
-        loadingSpinner.style.display = "none";
-        verificationActions.style.display = "flex";
       });
     </script>
   </head>
@@ -61,6 +119,23 @@
         <div id="verificationStatus" class="verification-status">
           <div class="loading-spinner" id="loadingSpinner"></div>
           <div id="statusMessage" class="status-message"></div>
+          <!-- Password Reset Form (hidden by default) -->
+          <form id="passwordResetForm" style="display: none; margin-top: 2rem">
+            <div class="form-group">
+              <label for="newPassword">New Password</label>
+              <input type="password" id="newPassword" required minlength="6" />
+            </div>
+            <div class="form-group">
+              <label for="confirmPassword">Confirm Password</label>
+              <input
+                type="password"
+                id="confirmPassword"
+                required
+                minlength="6"
+              />
+            </div>
+            <button type="submit" class="btn-primary">Reset Password</button>
+          </form>
         </div>
         <div
           id="verificationActions"
