@@ -154,3 +154,51 @@ class FirebaseService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to get user: {str(e)}"
             )
+    
+    async def send_invitation_email(self, email: str, display_name: str = "", expiry_minutes: int = 1):
+        """Generate Firebase email sign-in (magic) link and send it via SMTP with a custom template. Create user if not exists."""
+        try:
+            # 1. Ensure user exists in Firebase
+            try:
+                user_record = auth.get_user_by_email(email)
+            except auth.UserNotFoundError:
+                user_record = auth.create_user(email=email, display_name=display_name)
+            # 2. Generate the sign-in link with custom ActionCodeSettings, including email in continueUrl
+            from firebase_admin import auth as firebase_auth
+            from urllib.parse import urlencode
+            continue_url = f"{settings.INVITE_CONTINUE_URL}?email={email}"
+            action_code_settings = firebase_auth.ActionCodeSettings(
+                url=continue_url,  # e.g., your frontend registration page with email param
+                handle_code_in_app=True,
+            )
+            sign_in_link = firebase_auth.generate_sign_in_with_email_link(email, action_code_settings)
+            # 3. Prepare the email
+            app_name = settings.APP_NAME
+            subject = f"You're invited to join {app_name}!"
+            html = f"""
+            <html>
+              <body style='font-family: Arial, sans-serif;'>
+                <h2>Invitation to {app_name}</h2>
+                <p>Hi {display_name or email},</p>
+                <p>You have been invited to join {app_name}. Click the button below to set your password and activate your account. This link will expire in {expiry_minutes} minute(s).</p>
+                <a href='{sign_in_link}' style='background: #1976d2; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 4px;'>Accept Invitation</a>
+                <p>If you did not expect this invitation, you can ignore this email.</p>
+                <p>Thanks,<br>{app_name} Team</p>
+              </body>
+            </html>
+            """
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = settings.EMAIL_FROM
+            msg["To"] = email
+            msg.attach(MIMEText(html, "html"))
+            # 4. Send the email
+            with smtplib.SMTP(settings.EMAIL_HOST, settings.EMAIL_PORT) as server:
+                server.starttls()
+                server.login(settings.EMAIL_USER, settings.EMAIL_PASS)
+                server.sendmail(msg["From"], [email], msg.as_string())
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to send invitation email: {str(e)}"
+            )

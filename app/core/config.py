@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 30
     FIREBASE_API_KEY: str
+    INVITE_CONTINUE_URL: str = os.getenv("INVITE_CONTINUE_URL", "http://localhost:3001/verify-user?mode=invite")
 
     # Email config fields
     EMAIL_HOST: str

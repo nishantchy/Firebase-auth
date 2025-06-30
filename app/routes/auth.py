@@ -4,13 +4,13 @@ from datetime import datetime, timedelta
 from app.core.database import get_session
 from app.core.config import settings
 from app.utils.security import hash_password
-from app.services.dependencies import get_firebase_service
+from app.services.dependencies import get_firebase_service, get_current_user
 from app.utils.jwt_utils import create_access_token
 from app.services.user_service import get_or_create_user
 from app.utils.email_validator import EmailValidator
 
 from app.models.user import User, AuthProvider
-from app.schemas.user import UserCreate, UserLogin, UserLoginResponse, TokenResponse, GoogleAuthRequest, PasswordResetRequest, SetNewPasswordRequest
+from app.schemas.user import UserCreate, UserLogin, UserLoginResponse, TokenResponse, GoogleAuthRequest, PasswordResetRequest, SetNewPasswordRequest, InviteRequest, VerifyInviteRequest
 from app.services.firebase import FirebaseService
 
 router = APIRouter(
@@ -41,7 +41,6 @@ async def register_with_email(
             password=user_data.password,
             display_name=user_data.display_name
         )
-        # Hash password for storage
         hashed_password = hash_password(user_data.password)
         # Check if user already exists in our database
         statement = select(User).where(User.email == user_data.email)
@@ -261,3 +260,74 @@ async def set_new_password(
         raise HTTPException(status_code=404, detail="User not found in local database")
 
     return {"message": "Password has been reset successfully."}
+
+@router.post("/invite")
+async def invite_user(
+    request: InviteRequest,
+    session: Session = Depends(get_session),
+    firebase_service: FirebaseService = Depends(get_firebase_service),
+    current_user: User = Depends(get_current_user)
+):
+    email = request.email
+    display_name = request.display_name
+    # 1. Ensure user exists in Firebase and get UID
+    try:
+        from firebase_admin import auth as firebase_auth
+        try:
+            user_record = firebase_auth.get_user_by_email(email)
+        except firebase_auth.UserNotFoundError:
+            user_record = firebase_auth.create_user(email=email, display_name=display_name)
+        firebase_uid = user_record.uid
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create/find Firebase user: {str(e)}")
+
+    # 2. Check if user already exists in local DB
+    statement = select(User).where(User.email == email)
+    user = session.exec(statement).first()
+    if not user:
+        user = User(
+            firebase_uid=firebase_uid,
+            email=email,
+            display_name=display_name,
+            is_email_verified=False,
+            auth_provider=AuthProvider.EMAIL
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+    # 3. Send invitation email (magic link)
+    await firebase_service.send_invitation_email(email, display_name, expiry_minutes=1)
+    return {"message": f"Invitation sent to {email}"}
+
+@router.post("/verify-invite")
+async def verify_invite(
+    request: VerifyInviteRequest,
+    session: Session = Depends(get_session),
+    firebase_service: FirebaseService = Depends(get_firebase_service)
+):
+    """Verify invitation link, mark email as verified in local DB."""
+    import requests
+    try:
+        firebase_api_key = settings.FIREBASE_API_KEY
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink?key={firebase_api_key}"
+        payload = {"oobCode": request.oobCode, "email": request.email}
+        resp = requests.post(url, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        email = data.get("email") or request.email
+        if not email:
+            raise Exception("Email not found in Firebase response.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to verify invite: {str(e)}")
+
+    # Update local DB
+    statement = select(User).where(User.email == email)
+    user = session.exec(statement).first()
+    if user:
+        user.is_email_verified = True
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return {"message": "Invitation verified and email marked as verified."}
+    else:
+        raise HTTPException(status_code=404, detail="User not found in local database")

@@ -57,3 +57,11 @@ class PasswordResetRequest(SQLModel):
 class SetNewPasswordRequest(SQLModel):
     oobCode: str
     new_password: str
+
+class InviteRequest(SQLModel):
+    email: EmailStr
+    display_name: str = ""
+
+class VerifyInviteRequest(SQLModel):
+    oobCode: str
+    email: EmailStr

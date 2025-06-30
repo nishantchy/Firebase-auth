@@ -151,13 +151,7 @@ loginForm.addEventListener("submit", async (e) => {
       email,
       password,
     });
-    showStatus("Login successful!", "success");
-    localStorage.setItem("jwt_token", result.access_token);
-    localStorage.setItem("user", JSON.stringify(result.user));
-    setTimeout(() => {
-      alert("Login successful! Welcome back.");
-      // You can redirect to a dashboard here
-    }, 2000);
+    handleLoginSuccess(result.access_token, result.user);
   } catch (error) {
     let errorMessage = error.message;
     if (
@@ -194,13 +188,7 @@ googleSignInBtn.addEventListener("click", async () => {
       id_token: idToken,
     });
 
-    showStatus("Google login successful!", "success");
-    localStorage.setItem("jwt_token", apiResult.access_token);
-    localStorage.setItem("user", JSON.stringify(apiResult.user));
-
-    setTimeout(() => {
-      alert("Google login successful! Welcome.");
-    }, 2000);
+    handleLoginSuccess(apiResult.access_token, apiResult.user);
   } catch (error) {
     console.error("Google sign-in error:", error);
     let errorMessage = error.message;
@@ -402,4 +390,16 @@ if (forgotPasswordLink && passwordResetRequestForm && backToLoginFromReset) {
       submitBtn.textContent = "Send Reset Link";
     }
   });
+}
+
+// After successful login, redirect to invite.html
+function handleLoginSuccess(token, user) {
+  localStorage.setItem("access_token", token);
+  localStorage.setItem("jwt_token", token);
+  localStorage.setItem("user", JSON.stringify(user));
+  showStatus("Login successful!", "success");
+  setTimeout(() => {
+    alert("Login successful! Welcome back.");
+    window.location.href = "/invite.html";
+  }, 2000);
 }

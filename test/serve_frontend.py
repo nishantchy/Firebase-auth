@@ -21,7 +21,7 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        # Serve verify-user.html for /verify-user (with or without query params)
+        # Serve verify-user.html for /verify-user (with or without query params, including mode=invite)
         if self.path.startswith("/verify-user"):
             self.path = "/verify-user.html"
         return super().do_GET()

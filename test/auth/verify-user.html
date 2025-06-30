@@ -11,6 +11,7 @@
         getAuth,
         applyActionCode,
         confirmPasswordReset,
+        isSignInWithEmailLink,
       } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
       const firebaseConfig = {
@@ -25,16 +26,70 @@
 
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
+
+      // Parse query params
       const urlParams = new URLSearchParams(window.location.search);
       const mode = urlParams.get("mode");
       const actionCode = urlParams.get("oobCode");
+
+      const statusMessage = document.getElementById("statusMessage");
+      const loadingSpinner = document.getElementById("loadingSpinner");
+      const verificationActions = document.getElementById(
+        "verificationActions"
+      );
+      const passwordResetForm = document.getElementById("passwordResetForm");
+
+      async function verifyInvite(oobCode) {
+        // Try to get email from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        let email = urlParams.get("email");
+        if (!email) {
+          email = window.localStorage.getItem("inviteEmail");
+        }
+        if (!email) {
+          email = window.prompt(
+            "Please enter your email to confirm your invitation:"
+          );
+        }
+        if (!email) {
+          statusMessage.innerHTML = `<span class='error'>❌ Email is required to verify your invitation.</span>`;
+          loadingSpinner.style.display = "none";
+          return;
+        }
+        statusMessage.innerHTML = "<span>Verifying your invitation...</span>";
+        loadingSpinner.style.display = "block";
+        try {
+          const resp = await fetch(
+            "http://localhost:8000/api/auth/verify-invite",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ oobCode, email }),
+            }
+          );
+          const data = await resp.json();
+          loadingSpinner.style.display = "none";
+          if (resp.ok) {
+            statusMessage.innerHTML = `<span class='success'>✅ Invitation verified! Your email is now verified. You can log in.</span>`;
+            verificationActions.innerHTML = `<a href='/index.html' class='btn-primary'>Go to Login</a>`;
+          } else {
+            statusMessage.innerHTML = `<span class='error'>❌ ${
+              data.detail || "Failed to verify invitation."
+            }</span>`;
+            verificationActions.innerHTML = `<a href='/index.html' class='btn-primary'>Go to Login</a>`;
+          }
+        } catch (err) {
+          loadingSpinner.style.display = "none";
+          statusMessage.innerHTML = `<span class='error'>❌ Network error. Please try again later.</span>`;
+          verificationActions.innerHTML = `<a href='/index.html' class='btn-primary'>Go to Login</a>`;
+        }
+      }
+
       document.addEventListener("DOMContentLoaded", async () => {
-        const statusMessage = document.getElementById("statusMessage");
-        const loadingSpinner = document.getElementById("loadingSpinner");
-        const verificationActions = document.getElementById(
-          "verificationActions"
-        );
-        const passwordResetForm = document.getElementById("passwordResetForm");
+        if (mode === "signIn" && actionCode) {
+          await verifyInvite(actionCode);
+          return;
+        }
         if (mode === "verifyEmail" && actionCode) {
           try {
             await applyActionCode(auth, actionCode);
