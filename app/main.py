@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import create_db_and_tables
 from app.routes.auth import router as auth_router
+from app.routes.products import router as products_router
 
 create_db_and_tables()
 
@@ -22,6 +23,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(products_router)
 
 print(settings.DATABASE_URL)
 

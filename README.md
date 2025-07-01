@@ -185,3 +185,37 @@ This project provides a robust, secure authentication system with:
 - Set up SMTP credentials in `.env`
 - Better deliverability and branding
 - Supports custom email templates
+
+## Troubleshooting: Running RQ on Windows
+
+If you encounter an error like:
+
+```
+AttributeError: module 'os' has no attribute 'fork'
+```
+
+This is because RQ uses `os.fork()` by default, which is not available on Windows. To run the worker on Windows, use the following command:
+
+```
+rq worker --worker-class simple
+```
+
+This will allow RQ to use threads instead of processes, making it compatible with Windows.
+
+## RQ Dashboard
+
+You can monitor your background jobs using the RQ Dashboard. After running `docker-compose up`, access it at:
+
+http://localhost:9181
+
+## Accessing the Postgres Database
+
+Postgres does not provide a web interface at http://localhost:5432/. To view or manage your database, use a GUI client such as DBeaver, TablePlus, or pgAdmin, and connect with these settings:
+
+- Host: localhost
+- Port: 5432
+- User: postgres
+- Password: postgres
+- Database: mydatabase
+
+`docker-compose exec web python -m app.redis_queue.scraper_rq`
